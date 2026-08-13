@@ -65,7 +65,23 @@ export async function messageCommand(name, options) {
   if (options.businessKey) body.businessKey = options.businessKey;
   if (options.all) body.all = true;
 
-  const result = await client.correlateMessage(body);
+  // Camunda answers a message that matches nothing with an exception rather than an empty
+  // result, so the ordinary case of getting the name or business key wrong arrives as a
+  // Java class name unless it is caught here.
+  let result;
+  try {
+    result = await client.correlateMessage(body);
+  } catch (err) {
+    const raw = err.body?.message || err.message || '';
+    if (/MismatchingMessageCorrelation|No process definition or execution matches/.test(raw)) {
+      out.warn(`Nothing is waiting for a message called "${name}"${options.instance ? ` on instance ${options.instance}` : ''}${options.businessKey ? ` with business key ${options.businessKey}` : ''}.`);
+      out.note('camunda subscriptions   shows what is currently waiting, and under which name.');
+      process.exitCode = 1;
+      return;
+    }
+    throw err;
+  }
+
   if (out.isJsonMode()) return out.json(result);
 
   if (!result || result.length === 0) {

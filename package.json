@@ -1,6 +1,6 @@
 {
   "name": "camunda-cli",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Command-line client for self-hosted Camunda 7: inspect and lint deployed BPMN models, and diagnose why an instance is stuck",
   "license": "MIT",
   "type": "module",
