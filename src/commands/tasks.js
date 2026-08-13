@@ -10,6 +10,9 @@ export async function tasksCommand(options) {
   const query = { maxResults: options.limit ?? 50 };
   if (options.assignee) query.assignee = options.assignee;
   if (options.instance) query.processInstanceId = options.instance;
+  // The business key is the handle you chose when starting, so it is the natural way back
+  // to a task without first looking the instance id up.
+  if (options.businessKey) query.processInstanceBusinessKey = options.businessKey;
   if (options.key) query.processDefinitionKey = options.key;
   if (options.tenant) query.tenantIdIn = options.tenant;
   if (options.unassigned) query.unassigned = true;

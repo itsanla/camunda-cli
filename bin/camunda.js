@@ -24,7 +24,7 @@ program
       'Start with "camunda inspect <key>" to read a deployed model, and\n' +
       '"camunda diagnose <instanceId>" when an instance misbehaves.'
   )
-  .version('0.4.0')
+  .version('0.4.1')
   .option('--json', 'print the raw API payload instead of a formatted view')
   .option('--no-color', 'never emit colour, even on a terminal')
   .showHelpAfterError()
@@ -189,6 +189,7 @@ withTenant(
     .description('Open human tasks')
     .option('-a, --assignee <userId>')
     .option('-i, --instance <processInstanceId>')
+    .option('-b, --business-key <key>', 'tasks of the instance started with this business key')
     .option('-k, --key <definitionKey>')
     .option('-u, --unassigned')
     .option('--limit <n>', 'maximum rows', int)
