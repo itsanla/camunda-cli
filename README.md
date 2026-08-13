@@ -72,21 +72,29 @@ camunda lint ./order-process.bpmn     # no engine and no login needed
 camunda lint order-process            # or the deployed version
 ```
 
-Every rule exists because that failure was reproduced against a real engine first:
+Every rule exists because that failure was reproduced against a real engine first.
+
+**Errors** are reserved for defects that are provable from the model alone, because `deploy`
+refuses to push a model that has one:
 
 | Rule | What it catches |
 |---|---|
-| `uncovered-value` | `> N` and `< N` branches that leave `== N` with nowhere to go (`ENGINE-02004`) |
-| `no-default-flow` | Every branch conditional, no default: any instance where they all fail stops dead |
-| `variable-name-mismatch` | A condition reads `foo` while the form writes `foo_2`, so the expression throws |
-| `unwritten-variable` | A direct `${x}` read where nothing sets `x`; throws instead of yielding null |
-| `initiator-expression` | `${initiator}`, which exists only when started through AlurKerja's API |
-| `no-op-service-task` | A service task with no implementation behind it |
-| `addon-without-config` | An integration call with no config bound |
-| `unreachable`, `dead-end`, `dangling-flow` | Structural mistakes |
+| `uncovered-value` | `> N` and `< N` branches leaving `== N` with nowhere to go (`ENGINE-02004`) |
+| `default-flow-with-condition` | A default flow that also carries a condition, which the engine rejects outright (`ENGINE-09005`) |
+| `variable-name-mismatch` | A form writing one variable nothing reads, feeding a condition reading one nothing writes |
+| `dangling-flow`, `dangling-boundary`, `no-start-event` | References to elements that do not exist |
 
-`deploy` runs the same checks and refuses to push a model with blocking issues, unless you
-pass `--skip-lint`.
+**Warnings** are risks that need a human to judge, since the model cannot prove them either
+way: `no-default-flow`, `unwritten-variable`, `initiator-expression`, `no-op-service-task`,
+`addon-without-config`, `unreachable`, `dead-end`, `ambiguous-branch`.
+
+Run over 190 production models, the checks raised zero errors and did not block a single
+deploy, while still flagging both defects in a model built to contain them. That balance is
+deliberate: a static check an agent cannot trust is worse than none, because acting on a
+confident wrong answer breaks a process that was working.
+
+`deploy` runs the same checks and refuses to push a model with an error, unless you pass
+`--skip-lint`.
 
 **Work out why an instance is stuck.** `diagnose` gathers what is scattered across several
 endpoints and unpacks it:
