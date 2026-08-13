@@ -225,15 +225,18 @@ export async function stacktraceCommand(jobId, options) {
   if (omitted > 0) out.note(`  ... ${omitted} engine-internal frame(s) hidden, use --full for everything`);
 }
 
-// The execution trace. Ordering matters here: several activities routinely share a
-// millisecond, so ties are broken by following the sequence flows rather than trusting
-// the timestamp alone.
+// The execution trace, in the order the engine actually took the steps.
+//
+// Sorting by startTime looks right and is not: a gateway and the events either side of it
+// routinely share a millisecond, and the resulting order is arbitrary within that tie, so
+// a start event can appear halfway down the list. `occurrence` is the engine's own
+// execution sequence and is the only field that reflects real order.
 export async function traceCommand(id, options) {
   const client = new Client(requireConfig());
   const activities = await client.historyActivityInstances({
     processInstanceId: id,
     maxResults: options.limit ?? 200,
-    sortBy: 'startTime',
+    sortBy: 'occurrence',
     sortOrder: 'asc',
   });
 

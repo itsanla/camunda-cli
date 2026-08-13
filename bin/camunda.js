@@ -24,7 +24,7 @@ program
       'Start with "camunda inspect <key>" to read a deployed model, and\n' +
       '"camunda diagnose <instanceId>" when an instance misbehaves.'
   )
-  .version('0.2.0')
+  .version('0.3.0')
   .option('--json', 'print the raw API payload instead of a formatted view')
   .option('--no-color', 'never emit colour, even on a terminal')
   .showHelpAfterError()
@@ -66,7 +66,7 @@ withVersion(
   withTenant(
     program
       .command('inspect <keyOrId>')
-      .description('Structure of a deployed model: elements, flow conditions, forms, integrations')
+      .description('Structure of a model: elements, flow conditions, forms, integrations. Accepts a deployed key or a local .bpmn file')
       .option('--no-lint', 'skip the static-check summary at the end')
   )
 ).action(inspectCommand);
@@ -75,7 +75,7 @@ withVersion(
   withTenant(
     program
       .command('lint <keyOrId>')
-      .description('Static checks over a deployed model, before an instance has to find the bugs')
+      .description('Static checks over a model, before an instance has to find the bugs. Accepts a deployed key or a local .bpmn file')
       .option('-a, --all', 'include informational findings')
       .addOption(new Option('-s, --severity <level>', 'only one severity').choices(['error', 'warning', 'info']))
   )
@@ -120,12 +120,15 @@ withVersion(
   )
 ).action(startCommand);
 
-program
-  .command('cancel <id>')
-  .description('Force-terminate a running instance; it ends as EXTERNALLY_TERMINATED')
-  .option('-r, --reason <text>', 'recorded against the instance')
-  .option('-y, --yes', 'skip the confirmation prompt')
-  .action(cancelCommand);
+withTenant(
+  program
+    .command('cancel [id]')
+    .description('Force-terminate one instance, or every instance of a process with --key')
+    .option('-k, --key <definitionKey>', 'cancel every running instance of this process')
+    .option('-b, --business-key <key>', 'with --key, only instances carrying this business key')
+    .option('-r, --reason <text>', 'recorded against the instances')
+    .option('-y, --yes', 'skip the confirmation prompt')
+).action(cancelCommand);
 
 program
   .command('vars <instanceId>')

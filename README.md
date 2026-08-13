@@ -63,7 +63,15 @@ Sequence flows
   Gateway_1jk90v6   Activity_retry    no     ${paid == false}
 ```
 
-**Find the bugs before an instance does.** `lint` checks the deployed model statically.
+**Find the bugs before an instance does.** `lint` checks a model statically. It takes a
+deployed key or a local file, so the usual loop is to check while editing and only then
+deploy:
+
+```bash
+camunda lint ./order-process.bpmn     # no engine and no login needed
+camunda lint order-process            # or the deployed version
+```
+
 Every rule exists because that failure was reproduced against a real engine first:
 
 | Rule | What it catches |
@@ -132,10 +140,28 @@ engine's key-based endpoints answer *"no matching process definition ... and no 
 which reads like the process is missing when it is not. Every command taking a key accepts
 `--tenant`, and an ambiguous key lists the candidates rather than guessing.
 
-**`start` waits before reporting success.** A start returning HTTP 200 only means the engine
-accepted it; anything marked async runs after the response. `start` looks for a failure a
-moment later and reports it, instead of leaving you with a green message and a broken
-instance. `--no-wait` skips that.
+**`start` and `complete` report what happened next.** A start returning HTTP 200 only means
+the engine accepted it; anything marked async runs after the response. Both commands wait a
+moment, then say whether it failed, whether the instance finished, or which task is now
+waiting, along with the exact command to complete it:
+
+```
+$ camunda start order-process --var amount=700:Integer
+Started order-process v9 as instance 3435051
+
+Now waiting at:
+    3435058  check stock  ops
+camunda complete 3435058 --var quantity=<value>
+
+$ camunda complete 3435058 --var quantity=3
+Task 3435058 completed.
+Instance 3435051 finished in 8.0s.
+```
+
+`--no-wait` skips the follow-up.
+
+**Cleaning up after a test run.** `cancel --key <key>` terminates every running instance of
+a process in one go, which matters because testing a model leaves a trail of them behind.
 
 **Variable types matter.** `--var n=300` sends a string, and `"300" > 200` is a string
 comparison. Use `--var n=300:Integer` where a gateway compares numerically, or `name:=<json>`

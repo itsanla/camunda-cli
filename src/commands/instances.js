@@ -2,6 +2,8 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { Client, parseVariableFlags, resolveDefinition } from '../client.js';
 import { requireConfig } from '../config.js';
+import { readProcess } from '../bpmn.js';
+import { reportNextState, suggestCompletion } from '../followup.js';
 import * as out from '../output.js';
 
 export async function instancesCommand(options) {
@@ -117,46 +119,72 @@ export async function startCommand(keyOrId, options) {
     variables,
   });
 
-  // A start returning 200 only means the engine accepted it. Anything marked async runs
-  // after the response, so a failure there shows up as a job or incident a moment later
-  // rather than in this reply.
-  let trouble = { incidents: [], jobs: [] };
-  if (!options.noWait) {
-    await new Promise((r) => setTimeout(r, options.wait ?? 1200));
-    const [incidents, jobs] = await Promise.all([
-      client.incidents({ processInstanceId: result.id }).catch(() => []),
-      client.jobs({ processInstanceId: result.id, withException: true }).catch(() => []),
-    ]);
-    trouble = { incidents, jobs };
-  }
-
-  if (out.isJsonMode()) return out.json({ ...result, ...trouble });
+  if (out.isJsonMode() && options.noWait) return out.json(result);
 
   out.line(`Started ${def.key} v${def.version} as instance ${result.id}`);
   if (result.businessKey) out.note(`business key ${result.businessKey}`);
+  if (options.noWait) return;
 
-  if (trouble.incidents.length > 0 || trouble.jobs.length > 0) {
-    const msg = trouble.incidents[0]?.incidentMessage || trouble.jobs[0]?.exceptionMessage;
-    out.problem(`\nIt already failed after starting: ${msg}`);
-    out.note(`Run: camunda diagnose ${result.id}`);
-    process.exitCode = 1;
+  // A start returning 200 only means the engine accepted it. Anything marked async runs
+  // after the response, so both a failure and the first user task appear a moment later
+  // rather than in this reply.
+  const next = await reportNextState(client, result.id, { wait: options.wait ?? 1200 });
+  if (next.failed) process.exitCode = 1;
+  else if (next.tasks.length === 1) {
+    out.note(await suggestCompletion(client, next.tasks[0], readProcess));
   }
 }
 
+// Takes either one id or a whole definition's worth of instances. Testing a model leaves
+// a trail of instances behind, and clearing them one confirmation at a time is enough
+// friction that they tend to get left running instead.
 export async function cancelCommand(id, options) {
   const client = new Client(requireConfig());
 
-  if (!options.yes) {
-    const rl = createInterface({ input: stdin, output: stdout });
-    const answer = await rl.question(
-      `Force-terminating ${id} cannot be undone (it ends as EXTERNALLY_TERMINATED, not COMPLETED).\nType the instance id to confirm: `
-    );
-    rl.close();
-    if (answer.trim() !== id) return out.note('Aborted, the id did not match.');
+  if (!id && !options.key) {
+    throw new Error('Give an instance id, or --key <definitionKey> to cancel every running instance of one process.');
   }
 
-  await client.deleteProcessInstance(id, { reason: options.reason });
-  out.line(`Instance ${id} terminated.`);
+  let targets;
+  if (id) {
+    targets = [id];
+  } else {
+    const query = { processDefinitionKey: options.key, maxResults: 1000 };
+    if (options.tenant) query.tenantIdIn = options.tenant;
+    if (options.businessKey) query.businessKey = options.businessKey;
+    const found = await client.processInstances(query);
+    targets = found.map((i) => i.id);
+    if (targets.length === 0) return out.note(`No running instances of ${options.key}.`);
+  }
+
+  if (!options.yes) {
+    const rl = createInterface({ input: stdin, output: stdout });
+    const what =
+      targets.length === 1
+        ? `Force-terminating ${targets[0]}`
+        : `Force-terminating all ${targets.length} running instances of ${options.key}`;
+    const expect = targets.length === 1 ? targets[0] : String(targets.length);
+    const answer = await rl.question(
+      `${what} cannot be undone (they end as EXTERNALLY_TERMINATED, not COMPLETED).\nType "${expect}" to confirm: `
+    );
+    rl.close();
+    if (answer.trim() !== expect) return out.note('Aborted, that did not match.');
+  }
+
+  let done = 0;
+  const failures = [];
+  for (const target of targets) {
+    try {
+      await client.deleteProcessInstance(target, { reason: options.reason });
+      done++;
+    } catch (err) {
+      failures.push(`${target}: ${err.message}`);
+    }
+  }
+
+  out.line(`Terminated ${done} instance(s).`);
+  for (const f of failures) out.problem(`  ${f}`);
+  if (failures.length > 0) process.exitCode = 1;
 }
 
 export async function varsCommand(id, options) {

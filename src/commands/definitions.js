@@ -1,9 +1,27 @@
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { Client, resolveDefinition } from '../client.js';
 import { requireConfig } from '../config.js';
 import { readProcess } from '../bpmn.js';
 import { lintProcess } from '../lint.js';
 import * as out from '../output.js';
+
+// inspect and lint accept a local .bpmn file as well as a deployed key, because the point
+// of checking a model is to do it while editing, before it reaches an engine. A local file
+// needs no credentials either, so the config lookup only happens for the remote path.
+function isLocalFile(target) {
+  return /\.(bpmn|xml|dmn)$/i.test(target) && existsSync(target) && statSync(target).isFile();
+}
+
+async function loadModel(target, options) {
+  if (isLocalFile(target)) {
+    const xml = readFileSync(target, 'utf8');
+    return { model: readProcess(xml), xml, source: { local: target } };
+  }
+  const client = new Client(requireConfig());
+  const def = await resolveDefinition(client, target, options);
+  const { bpmn20Xml } = await client.processDefinitionXml(def.id);
+  return { model: readProcess(bpmn20Xml), xml: bpmn20Xml, source: { definition: def }, client };
+}
 
 export async function definitionsCommand(options) {
   const client = new Client(requireConfig());
@@ -27,32 +45,41 @@ export async function definitionsCommand(options) {
 // Structural view of a deployed model. None of this is available as a REST resource:
 // it is read out of the deployed BPMN XML, which is the only place the engine keeps it.
 export async function inspectCommand(keyOrId, options) {
-  const client = new Client(requireConfig());
-  const def = await resolveDefinition(client, keyOrId, options);
-  const { bpmn20Xml } = await client.processDefinitionXml(def.id);
-  const model = readProcess(bpmn20Xml);
+  const { model, source, client } = await loadModel(keyOrId, options);
+  const def = source.definition;
 
   let stats = [];
-  try {
-    stats = await client.processDefinitionStatistics(def.id);
-  } catch {
-    /* statistics are optional context, not worth failing the command over */
+  if (client && def) {
+    try {
+      stats = await client.processDefinitionStatistics(def.id);
+    } catch {
+      /* statistics are optional context, not worth failing the command over */
+    }
   }
   const liveByActivity = new Map(stats.map((s) => [s.id, s]));
 
   if (out.isJsonMode()) {
-    return out.json({ definition: def, process: stripRaw(model), statistics: stats });
+    return out.json({ definition: def ?? { file: source.local }, process: stripRaw(model), statistics: stats });
   }
 
-  out.heading(`${def.name || def.key}`);
-  out.kv([
-    ['key', def.key],
-    ['id', def.id],
-    ['version', def.version],
-    ['tenant', def.tenantId ?? '-'],
-    ['suspended', def.suspended ? 'yes' : 'no'],
-    ['executable', model.executable ? 'yes' : 'no'],
-  ]);
+  out.heading(def ? def.name || def.key : model.name || model.id);
+  out.kv(
+    def
+      ? [
+          ['key', def.key],
+          ['id', def.id],
+          ['version', def.version],
+          ['tenant', def.tenantId ?? '-'],
+          ['suspended', def.suspended ? 'yes' : 'no'],
+          ['executable', model.executable ? 'yes' : 'no'],
+        ]
+      : [
+          ['file', source.local],
+          ['process id', model.id],
+          ['executable', model.executable ? 'yes' : 'no'],
+          ['status', 'not deployed, read from disk'],
+        ]
+  );
 
   if (model.lanes.length > 0) {
     out.line('\nLanes');
@@ -114,24 +141,22 @@ export async function inspectCommand(keyOrId, options) {
 }
 
 export async function lintCommand(keyOrId, options) {
-  const client = new Client(requireConfig());
-  const def = await resolveDefinition(client, keyOrId, options);
-  const { bpmn20Xml } = await client.processDefinitionXml(def.id);
-  const model = readProcess(bpmn20Xml);
+  const { model, source } = await loadModel(keyOrId, options);
+  const label = source.definition ? `${source.definition.key} v${source.definition.version}` : source.local;
   const findings = lintProcess(model);
 
   const wanted = options.severity
     ? findings.filter((f) => f.severity === options.severity)
     : findings.filter((f) => options.all || f.severity !== 'info');
 
-  if (out.isJsonMode()) return out.json({ definition: def.id, findings: wanted });
+  if (out.isJsonMode()) return out.json({ source: label, findings: wanted });
 
   if (wanted.length === 0) {
-    out.line(`${def.key} v${def.version}: nothing to report.`);
+    out.line(`${label}: nothing to report.`);
     return;
   }
 
-  out.heading(`${def.key} v${def.version}`);
+  out.heading(label);
   for (const f of wanted) {
     const tag = f.severity === 'error' ? 'ERROR  ' : f.severity === 'warning' ? 'WARNING' : 'INFO   ';
     out.line(`\n${tag} ${f.rule}  ${f.element}`);

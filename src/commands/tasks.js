@@ -1,6 +1,7 @@
 import { Client, parseVariableFlags } from '../client.js';
 import { requireConfig } from '../config.js';
 import { readProcess } from '../bpmn.js';
+import { reportNextState, suggestCompletion } from '../followup.js';
 import { unwrapError, explain } from '../errors.js';
 import * as out from '../output.js';
 
@@ -84,6 +85,13 @@ export async function completeCommand(id, options) {
   const client = new Client(requireConfig());
   const variables = parseVariableFlags(options.var);
 
+  // The task is gone once it completes, so its instance has to be noted beforehand for
+  // the follow-up to have something to report on.
+  const instanceId = await client
+    .task(id)
+    .then((t) => t.processInstanceId)
+    .catch(() => null);
+
   try {
     await client.completeTask(id, variables);
   } catch (err) {
@@ -108,11 +116,12 @@ export async function completeCommand(id, options) {
   }
 
   out.line(`Task ${id} completed.`);
+  if (options.noWait || !instanceId) return;
 
-  if (!options.noWait) {
-    await new Promise((r) => setTimeout(r, options.wait ?? 1000));
-    const task = await client.task(id).catch(() => null);
-    void task;
+  const next = await reportNextState(client, instanceId, { wait: options.wait ?? 1000 });
+  if (next.failed) process.exitCode = 1;
+  else if (next.tasks.length === 1) {
+    out.note(await suggestCompletion(client, next.tasks[0], readProcess));
   }
 }
 
