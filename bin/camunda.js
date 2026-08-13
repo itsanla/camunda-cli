@@ -24,7 +24,7 @@ program
       'Start with "camunda inspect <key>" to read a deployed model, and\n' +
       '"camunda diagnose <instanceId>" when an instance misbehaves.'
   )
-  .version('0.4.1')
+  .version('0.4.2')
   .option('--json', 'print the raw API payload instead of a formatted view')
   .option('--no-color', 'never emit colour, even on a terminal')
   .showHelpAfterError()

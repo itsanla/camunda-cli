@@ -19,6 +19,8 @@ ERROR   variable-name-mismatch  flow Flow_0jpsuir (retry)
         expression throws "Cannot resolve identifier 'input_huruf'" the moment it is evaluated.
 ```
 
+A task-by-task guide in Indonesian is in [PANDUAN.md](PANDUAN.md).
+
 ## Install
 
 ```bash
