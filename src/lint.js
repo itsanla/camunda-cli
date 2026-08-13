@@ -108,7 +108,8 @@ export function lintProcess(model, { engineVariables = [] } = {}) {
         n.id,
         `Every outgoing flow of "${n.name || n.id}" has a condition and there is no default flow. ` +
           `If they all evaluate false at runtime the engine raises ENGINE-02004 and the instance stops. ` +
-          `Mark one flow as the default.`
+          `Mark one flow as the default and remove its condition: a default flow carrying a condition is ` +
+          `rejected at deploy time with ENGINE-09005.`
       );
 
       // Numeric gap: a > N and a < N leave a == N with nowhere to go.
@@ -131,6 +132,29 @@ export function lintProcess(model, { engineVariables = [] } = {}) {
               `so ${variable} == ${gt.value} matches neither branch and the instance will fail there.`
           );
         }
+      }
+    }
+
+    // The engine refuses to parse this rather than failing at runtime, so a model that is
+    // otherwise fine is rejected outright at deploy time.
+    if (n.defaultFlow) {
+      const target = outs.find((f) => f.id === n.defaultFlow);
+      if (!target) {
+        add(
+          'error',
+          'default-flow-missing',
+          n.id,
+          `"${n.name || n.id}" names "${n.defaultFlow}" as its default flow, but that is not one of its outgoing flows.`
+        );
+      } else if (target.condition) {
+        add(
+          'error',
+          'default-flow-with-condition',
+          n.id,
+          `The default flow of "${n.name || n.id}" ("${target.name || target.id}") also carries the condition ` +
+            `${target.condition}. A default flow is the branch taken when nothing else matches, so it cannot have ` +
+            `one: the engine rejects this at deploy time with ENGINE-09005. Remove the condition from that flow.`
+        );
       }
     }
 
