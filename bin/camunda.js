@@ -24,7 +24,7 @@ program
       'Start with "camunda inspect <key>" to read a deployed model, and\n' +
       '"camunda diagnose <instanceId>" when an instance misbehaves.'
   )
-  .version('0.5.0')
+  .version('0.6.0')
   .option('--json', 'print the raw API payload instead of a formatted view')
   .option('--no-color', 'never emit colour, even on a terminal')
   .showHelpAfterError()
@@ -132,9 +132,10 @@ withTenant(
 
 program
   .command('remove <workspace> <assignee>')
-  .description("Delete every instance holding an open task for <assignee> in a workspace's TEST tenant (workspace slug, name, or TEST tenant id)")
+  .description("Delete every instance holding an open task for <assignee> in a workspace's TEST tenant, or its LIVE tenant with --live (workspace slug, name, or tenant id)")
+  .option('--live', 'clear the LIVE tenant instead; always asks you to type the tenant name')
   .option('--dry-run', 'list what would be deleted and stop')
-  .option('-y, --yes', 'skip the confirmation prompt')
+  .option('-y, --yes', 'skip the confirmation prompt (never the --live one)')
   .action(removeCommand);
 
 program

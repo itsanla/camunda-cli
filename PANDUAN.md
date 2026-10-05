@@ -157,12 +157,16 @@ Untuk mengosongkan inbox satu penguji di AlurKerja sekaligus, tanpa peduli prose
 ```bash
 camunda remove dev-anla me@anla.my.id --dry-run   # lihat dulu apa yang akan dihapus
 camunda remove dev-anla me@anla.my.id             # hapus, diminta mengetik jumlah instance
+camunda remove dev-anla me@anla.my.id --live      # tenant LIVE: peringatan, lalu ketik nama tenant
 ```
 
 Perintah ini menghapus setiap instance yang punya task terbuka milik email itu di tenant
 `<Nama> (TEST)` workspace tersebut. Workspace boleh slug atau nama (`dev-anla`, `Plan Route`),
 atau id tenant TEST kalau namanya ambigu (`hospital (TEST)` dan `Hospital (TEST)`) atau slug-nya
-tidak mengikuti nama (`new-workspace` berjalan di `Telco (TEST)`). Id tenant LIVE ditolak.
+tidak mengikuti nama (`new-workspace` berjalan di `Telco (TEST)`). Id tenant LIVE ditolak kecuali
+memakai `--live`. Dengan `--live`, setelah daftar task muncul peringatan bahwa ini tenant LIVE (request
+sungguhan, bukan data uji) dan nama tenant harus diketik persis untuk melanjutkan; `-y` tidak
+melewati konfirmasi ini.
 Menghapus instance anak call activity ikut menghentikan induknya, jadi seluruh request berakhir,
 termasuk task orang lain di request yang sama.
 

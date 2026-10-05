@@ -176,7 +176,9 @@ a process in one go, which matters because testing a model leaves a trail of the
 `remove <workspace> <email>` clears one tester's inbox on an AlurKerja engine instead: it
 deletes every instance holding an open task assigned to that email in the workspace's
 `<Name> (TEST)` tenant. The workspace is a slug or name (`dev-anla`, `Plan Route`) or a Test
-tenant id; a Live tenant id is refused. `--dry-run` lists what would go. Deleting a called
+tenant id; a Live tenant id is refused. `--dry-run` lists what would go. `--live` clears the
+workspace's Live tenant instead: after the list it prints a warning and asks for the tenant name
+to be typed, a prompt `--yes` does not skip. Deleting a called
 child instance also terminates its parent, so the whole request ends, not only that task.
 
 **Variable types matter.** `--var n=300` sends a string, and `"300" > 200` is a string
