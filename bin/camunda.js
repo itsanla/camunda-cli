@@ -4,7 +4,7 @@ import { configureOutput, isJsonMode } from '../src/output.js';
 import { unwrapError, explain } from '../src/errors.js';
 import { loginCommand, logoutCommand, whoamiCommand } from '../src/commands/session.js';
 import { definitionsCommand, inspectCommand, lintCommand, xmlCommand, statsCommand } from '../src/commands/definitions.js';
-import { instancesCommand, instanceCommand, startCommand, cancelCommand, varsCommand } from '../src/commands/instances.js';
+import { instancesCommand, instanceCommand, startCommand, cancelCommand, removeCommand, varsCommand } from '../src/commands/instances.js';
 import { diagnoseCommand, incidentsCommand, jobsCommand, stacktraceCommand, traceCommand } from '../src/commands/diagnose.js';
 import { tasksCommand, taskCommand, completeCommand, claimCommand } from '../src/commands/tasks.js';
 import { deploymentsCommand, deployCommand, undeployCommand } from '../src/commands/deploy.js';
@@ -24,7 +24,7 @@ program
       'Start with "camunda inspect <key>" to read a deployed model, and\n' +
       '"camunda diagnose <instanceId>" when an instance misbehaves.'
   )
-  .version('0.4.3')
+  .version('0.5.0')
   .option('--json', 'print the raw API payload instead of a formatted view')
   .option('--no-color', 'never emit colour, even on a terminal')
   .showHelpAfterError()
@@ -129,6 +129,13 @@ withTenant(
     .option('-r, --reason <text>', 'recorded against the instances')
     .option('-y, --yes', 'skip the confirmation prompt')
 ).action(cancelCommand);
+
+program
+  .command('remove <workspace> <assignee>')
+  .description("Delete every instance holding an open task for <assignee> in a workspace's TEST tenant (workspace slug, name, or TEST tenant id)")
+  .option('--dry-run', 'list what would be deleted and stop')
+  .option('-y, --yes', 'skip the confirmation prompt')
+  .action(removeCommand);
 
 program
   .command('vars <instanceId>')

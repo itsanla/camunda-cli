@@ -132,7 +132,7 @@ sentence you need is at the bottom, so that is what gets printed first.
 ```
 Session      login  logout  whoami
 Models       definitions  inspect  lint  xml  stats
-Instances    instances  instance  start  cancel  vars  set-var
+Instances    instances  instance  start  cancel  remove  vars  set-var
 Diagnosis    diagnose  trace  incidents  jobs  stacktrace
 Tasks        tasks  task  complete  claim
 Deployment   deployments  deploy  undeploy
@@ -172,6 +172,12 @@ Instance 3435051 finished in 8.0s.
 
 **Cleaning up after a test run.** `cancel --key <key>` terminates every running instance of
 a process in one go, which matters because testing a model leaves a trail of them behind.
+
+`remove <workspace> <email>` clears one tester's inbox on an AlurKerja engine instead: it
+deletes every instance holding an open task assigned to that email in the workspace's
+`<Name> (TEST)` tenant. The workspace is a slug or name (`dev-anla`, `Plan Route`) or a Test
+tenant id; a Live tenant id is refused. `--dry-run` lists what would go. Deleting a called
+child instance also terminates its parent, so the whole request ends, not only that task.
 
 **Variable types matter.** `--var n=300` sends a string, and `"300" > 200` is a string
 comparison. Use `--var n=300:Integer` where a gateway compares numerically, or `name:=<json>`

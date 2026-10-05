@@ -187,6 +187,102 @@ export async function cancelCommand(id, options) {
   if (failures.length > 0) process.exitCode = 1;
 }
 
+// AlurKerja runs each workspace on two tenants, "<Name>" for Live and "<Name> (TEST)" for
+// Test. Clearing a tester's inbox only ever touches the Test one, so the workspace is
+// resolved to its "(TEST)" tenant and a Live tenant id is refused outright.
+const TENANT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TEST_SUFFIX = /\s*\(TEST\)\s*$/i;
+const workspaceSlug = (name) =>
+  String(name ?? '')
+    .replace(TEST_SUFFIX, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+async function resolveTestTenant(client, workspace) {
+  if (TENANT_ID.test(workspace)) {
+    const [tenant] = await client.tenants({ id: workspace });
+    if (!tenant) throw new Error(`No tenant with id ${workspace}.`);
+    if (!TEST_SUFFIX.test(tenant.name ?? '')) {
+      throw new Error(`${workspace} is "${tenant.name}", a Live tenant. remove only clears "(TEST)" tenants.`);
+    }
+    return tenant;
+  }
+
+  const wanted = workspaceSlug(workspace);
+  const all = await client.tenants({ maxResults: 1000 });
+  const matches = all.filter((t) => TEST_SUFFIX.test(t.name ?? '') && workspaceSlug(t.name) === wanted);
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    const list = matches.map((t) => `  ${t.id}  ${t.name}`).join('\n');
+    throw new Error(`"${workspace}" matches ${matches.length} Test tenants. Pass the tenant id instead:\n${list}`);
+  }
+  // The engine only knows tenant names, and a workspace slug does not always follow its
+  // name (the "new-workspace" slug runs on "Telco (TEST)").
+  throw new Error(`No Test tenant named like "${workspace}". Find it with: camunda tenants -s <name>, then pass its id.`);
+}
+
+// Clears every open task assigned to one person in a workspace's Test tenant by deleting
+// the instance each task belongs to. Repeated test runs fill a tester's inbox faster than
+// cancelling them one request at a time in the App can empty it.
+export async function removeCommand(workspace, assignee, options) {
+  const client = new Client(requireConfig());
+  const tenant = await resolveTestTenant(client, workspace);
+
+  const tasks = await client.tasks({ tenantIdIn: tenant.id, assignee });
+  const instanceIds = [...new Set(tasks.map((t) => t.processInstanceId).filter(Boolean))].sort();
+
+  if (out.isJsonMode() && options.dryRun) return out.json({ tenant, assignee, tasks, instanceIds });
+
+  out.heading(`${tenant.name}  ${tenant.id}`);
+  out.kv([['assignee', assignee]]);
+  if (tasks.length === 0) return out.note(`\nNo open tasks assigned to ${assignee}.`);
+
+  const perName = new Map();
+  for (const t of tasks) perName.set(t.name ?? '(unnamed)', (perName.get(t.name ?? '(unnamed)') ?? 0) + 1);
+  out.line(`\n${tasks.length} open task(s) across ${instanceIds.length} instance(s)`);
+  out.table(
+    ['TASKS', 'NAME'],
+    [...perName].sort((a, b) => b[1] - a[1]).map(([name, count]) => [String(count), out.truncate(name, 60)])
+  );
+
+  if (options.dryRun) return out.note('\nDry run, nothing deleted.');
+
+  if (!options.yes) {
+    const rl = createInterface({ input: stdin, output: stdout });
+    const expect = String(instanceIds.length);
+    const answer = await rl.question(
+      `\nDeleting ${expect} instance(s) cannot be undone. Type "${expect}" to confirm: `
+    );
+    rl.close();
+    if (answer.trim() !== expect) return out.note('Aborted, that did not match.');
+  }
+
+  let removed = 0;
+  let gone = 0;
+  const failures = [];
+  for (const id of instanceIds) {
+    try {
+      await client.deleteProcessInstance(id, { skipSubprocesses: true });
+      removed++;
+    } catch (err) {
+      // Two tasks can share an instance with a parent that was deleted first.
+      if (err.status === 404) gone++;
+      else failures.push(`${id}: ${err.body?.message || err.message}`);
+    }
+  }
+  const left = await client.tasks({ tenantIdIn: tenant.id, assignee });
+
+  if (out.isJsonMode()) {
+    return out.json({ tenant, assignee, removed, alreadyGone: gone, failures, remainingTasks: left.length });
+  }
+  out.line(`\nDeleted ${removed} instance(s).${gone ? ` ${gone} were already gone.` : ''}`);
+  for (const f of failures) out.problem(`  ${f}`);
+  if (left.length > 0) out.warn(`${left.length} task(s) still assigned to ${assignee}.`);
+  else out.note(`No open tasks left for ${assignee}.`);
+  if (failures.length > 0) process.exitCode = 1;
+}
+
 export async function varsCommand(id, options) {
   const client = new Client(requireConfig());
 

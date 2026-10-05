@@ -152,6 +152,20 @@ camunda cancel --key Process_X -y -r "bersih-bersih" # tanpa konfirmasi
 
 Menguji meninggalkan banyak instance menggantung. Tanpa `-y` akan diminta konfirmasi.
 
+Untuk mengosongkan inbox satu penguji di AlurKerja sekaligus, tanpa peduli prosesnya:
+
+```bash
+camunda remove dev-anla me@anla.my.id --dry-run   # lihat dulu apa yang akan dihapus
+camunda remove dev-anla me@anla.my.id             # hapus, diminta mengetik jumlah instance
+```
+
+Perintah ini menghapus setiap instance yang punya task terbuka milik email itu di tenant
+`<Nama> (TEST)` workspace tersebut. Workspace boleh slug atau nama (`dev-anla`, `Plan Route`),
+atau id tenant TEST kalau namanya ambigu (`hospital (TEST)` dan `Hospital (TEST)`) atau slug-nya
+tidak mengikuti nama (`new-workspace` berjalan di `Telco (TEST)`). Id tenant LIVE ditolak.
+Menghapus instance anak call activity ikut menghentikan induknya, jadi seluruh request berakhir,
+termasuk task orang lain di request yang sama.
+
 ---
 
 ## Kasus 3: instance macet atau gagal

@@ -159,9 +159,9 @@ export class Client {
   activityInstanceTree(id) {
     return this.get(`/process-instance/${id}/activity-instances`);
   }
-  deleteProcessInstance(id, { reason, skipCustomListeners = true, skipIoMappings = true } = {}) {
+  deleteProcessInstance(id, { reason, skipCustomListeners = true, skipIoMappings = true, skipSubprocesses } = {}) {
     return this.request('DELETE', `/process-instance/${id}`, {
-      query: { skipCustomListeners, skipIoMappings, deleteReason: reason },
+      query: { skipCustomListeners, skipIoMappings, skipSubprocesses, deleteReason: reason },
     });
   }
   suspendProcessInstance(id, suspended) {
